@@ -23,6 +23,10 @@ jobs:
     steps:
       - name: Install build dependencies
         run: |
+          printf '%s\n' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian bullseye main' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian-security bullseye-security main' \
+            > /etc/apt/sources.list
           apt-get update
           apt-get install -y --no-install-recommends \
             ca-certificates curl git build-essential cmake pkg-config python3 \
