@@ -1,0 +1,83 @@
+name: Bullseye ARM64
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Alacritty upstream commit or tag
+        required: true
+        default: aa5d942f46c40184a3f214830ff5f7989f4733a1
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    container: debian:bullseye
+    env:
+      CARGO_HOME: /opt/cargo
+      RUSTUP_HOME: /opt/rustup
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git build-essential cmake pkg-config python3 \
+            libfontconfig1-dev libxcb-xfixes0-dev libxkbcommon-dev \
+            libxkbcommon-x11-dev libwayland-dev
+
+      - uses: actions/checkout@v4
+        with:
+          repository: alacritty/alacritty
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
+
+      - name: Install Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
+          sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain stable
+          echo /opt/cargo/bin >> "$GITHUB_PATH"
+
+      - name: Build
+        run: cargo build --locked --release -p alacritty
+
+      - name: Verify binary compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(dpkg --print-architecture)" = arm64
+          readelf -h target/release/alacritty | grep -q 'Machine:.*AArch64'
+          python3 - <<'PY'
+          import re
+          import subprocess
+
+          binary = 'target/release/alacritty'
+          symbols = subprocess.check_output(['readelf', '--dyn-syms', '--wide', binary], text=True)
+          versions = {tuple(map(int, v.split('.'))) for v in re.findall(r'@GLIBC_([0-9.]+)', symbols)}
+          assert versions, 'No GLIBC symbol versions found'
+          assert max(versions) <= (2, 31), f'Unexpected GLIBC requirement: {max(versions)}'
+          print('Highest required GLIBC version:', '.'.join(map(str, max(versions))))
+          PY
+          ldd target/release/alacritty | tee /tmp/alacritty-ldd.txt
+          if grep -q 'not found' /tmp/alacritty-ldd.txt; then exit 1; fi
+          target/release/alacritty --version
+
+      - name: Package
+        run: |
+          mkdir -p package dist
+          cp target/release/alacritty extra/alacritty.info package/
+          cp LICENSE-APACHE package/
+          git rev-parse HEAD > package/SOURCE_COMMIT
+          /opt/cargo/bin/rustc --version > package/RUST_VERSION
+          tar -czf dist/alacritty-bullseye-arm64.tar.gz -C package .
+          cd dist
+          sha256sum alacritty-bullseye-arm64.tar.gz > SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alacritty-bullseye-arm64
+          path: dist/
+          if-no-files-found: error
