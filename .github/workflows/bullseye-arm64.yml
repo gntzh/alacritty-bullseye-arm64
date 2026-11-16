@@ -76,7 +76,7 @@ jobs:
           mkdir -p package dist
           cp target/release/alacritty extra/alacritty.info package/
           cp LICENSE-APACHE package/
-          git rev-parse HEAD > package/SOURCE_COMMIT
+          git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD > package/SOURCE_COMMIT
           /opt/cargo/bin/rustc --version > package/RUST_VERSION
           tar -czf dist/alacritty-bullseye-arm64.tar.gz -C package .
           cd dist
