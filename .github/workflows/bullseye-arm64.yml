@@ -1,6 +1,8 @@
 name: Bullseye ARM64
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       source_ref:
@@ -30,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: alacritty/alacritty
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ inputs.source_ref || 'aa5d942f46c40184a3f214830ff5f7989f4733a1' }}
           persist-credentials: false
 
       - name: Install Rust
